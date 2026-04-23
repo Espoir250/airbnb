@@ -40,3 +40,4 @@ export const users: User[] = [
     bio: "Hosting stylish homes near the city center."
   }
 ];
+

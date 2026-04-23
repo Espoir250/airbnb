@@ -1,12 +1,18 @@
+import "dotenv/config"
 import express, { Request, Response } from "express";
 
 import  listingsRouter from "./routes/listings.routes";
 import  usersRouter from "./routes/users.routes";
+import {prisma} from "./config/prisma";
 
 const app = express();
-const port = 3000;
+const PORT = process.env.PORT;
 
 app.use(express.json());
+
+app.get("/", (req: Request, res: Response) => {
+  res.send("Welcome to Airbnb application");
+});
 
 app.use("/users", usersRouter);
 app.use("/listings", listingsRouter);
@@ -15,6 +21,18 @@ app.use((_req: Request, res: Response) => {
     res.status(404).json({ message: "route not found"});
 })
 
-app.listen(port, () => {
-    console.log(`Server is running on http://localhost:${port}`);
-})
+async function connectDb() {
+  try {
+    await prisma.$connect();
+    console.log("Database connected successfully");
+    app.listen(PORT, () => {
+      console.log(`Server running on http://localhost:${PORT}`);
+    });
+  } catch (error) {
+    console.log("====================================");
+    console.log(error);
+    console.log("====================================");
+  }
+}
+
+connectDb();

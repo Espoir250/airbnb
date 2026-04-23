@@ -1,75 +1,106 @@
 import { Request, Response } from "express";
+import { prisma } from "../config/prisma";
 
-import { User, users } from "../models/user.model";
-
-const requiredUserFields = ["name", "email", "username", "phone", "role"] as const;
-
-export const getAllUsers = (_req: Request, res: Response): void => {
-  res.status(200).json(users);
+export const getAllUsers = async (
+  _req: Request,
+  res: Response,
+): Promise<void> => {
+  try {
+    const users = await prisma.user.findMany();
+    res.status(200).json(users);
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ message: "Error fetching users" });
+  }
 };
 
-export const getUserById = (req: Request, res: Response): void => {
-  const userId = Number(req.params.id);
-  const user = users.find((currentUser) => currentUser.id === userId);
+export const getUserById = async (
+  req: Request,
+  res: Response,
+): Promise<void> => {
+  try {
+    const userId = Number(req.params.id);
+    const user = await prisma.user.findUnique({
+      where: { id: userId },
+    });
 
-  if (!user) {
+    if (!user) {
+      res.status(404).json({ message: "User not found" });
+      return;
+    }
+
+    res.status(200).json(user);
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ message: "Error fetching user" });
+  }
+};
+
+export const createUser = async (
+  req: Request,
+  res: Response,
+): Promise<void> => {
+  try {
+    const { name, email, username, bio, phone, role } = req.body;
+
+    const user = await prisma.user.create({
+      data: {
+        name,
+        email,
+        username,
+        bio,
+        phone,
+        role: role || "guest",
+      },
+    });
+    res.status(201).json(user);
+  } catch (error) {
+    console.error(error);
+    res.status(400).json({ message: "Error creating user" });
+  }
+};
+
+export const updateUser = async (
+  req: Request,
+  res: Response,
+): Promise<void> => {
+  try {
+    const userId = Number(req.params.id);
+    const { name, email, username, bio, phone, role } = req.body;
+
+    const user = await prisma.user.update({
+      where: { id: userId },
+      data: {
+        ...(name && { name }),
+        ...(email && { email }),
+        ...(username && { username }),
+        ...(bio !== undefined && { bio }),
+        ...(phone && { phone }),
+        ...(role && { role }),
+      },
+    });
+
+    res.status(200).json(user);
+  } catch (error) {
+    console.error(error);
     res.status(404).json({ message: "User not found" });
-    return;
   }
-
-  res.status(200).json(user);
 };
 
-export const createUser = (req: Request, res: Response): void => {
-  const missingField = requiredUserFields.find((field) => req.body[field] === undefined || req.body[field] === "");
+export const deleteUser = async (
+  req: Request,
+  res: Response,
+): Promise<void> => {
+  try {
+    const userId = Number(req.params.id);
 
-  if (missingField) {
-    res.status(400).json({ message: `Missing required field: ${missingField}` });
-    return;
-  }
+    await prisma.user.delete({
+      where: { id: userId },
+    });
 
-  const newUser: User = {
-    id: users.length > 0 ? Math.max(...users.map((user) => user.id)) + 1 : 1,
-    name: req.body.name,
-    email: req.body.email,
-    username: req.body.username,
-    phone: req.body.phone,
-    role: req.body.role,
-    avatar: req.body.avatar,
-    bio: req.body.bio
-  };
-
-  users.push(newUser);
-  res.status(201).json(newUser);
-};
-
-export const updateUser = (req: Request, res: Response): void => {
-  const userId = Number(req.params.id);
-  const userIndex = users.findIndex((user) => user.id === userId);
-
-  if (userIndex === -1) {
+    res.status(200).json({ message: "User deleted successfully" });
+  } catch (error) {
+    console.error(error);
     res.status(404).json({ message: "User not found" });
-    return;
   }
-
-  users[userIndex] = {
-    ...users[userIndex],
-    ...req.body,
-    id: users[userIndex].id
-  };
-
-  res.status(200).json(users[userIndex]);
-};
-
-export const deleteUser = (req: Request, res: Response): void => {
-  const userId = Number(req.params.id);
-  const userIndex = users.findIndex((user) => user.id === userId);
-
-  if (userIndex === -1) {
-    res.status(404).json({ message: "User not found" });
-    return;
-  }
-
-  const deletedUser = users.splice(userIndex, 1)[0];
-  res.status(200).json({ message: "User deleted successfully", user: deletedUser });
 };
