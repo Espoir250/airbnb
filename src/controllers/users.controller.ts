@@ -50,6 +50,7 @@ export const createUser = async (
         username,
         bio,
         phone,
+        password: "defaultpassword", // In a real application, you should hash the password and not use a default value
         role: role || "guest",
       },
     });

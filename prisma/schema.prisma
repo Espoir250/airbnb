@@ -4,22 +4,80 @@
 // Get a free hosted Postgres database in seconds: `npx create-db`
 
 generator client {
-  provider = "prisma-client"
-  output   = "../src/generated/prisma"
+  provider = "prisma-client-js"
 }
 
 datasource db {
   provider = "postgresql"
 }
 
+// Enums
+enum Role {
+  ADMIN
+  HOST
+  GUEST
+}
+
+enum ListingType {
+  APARTMENT
+  HOUSE
+  VILLA
+  CABIN
+}
+
+enum BookingStatus {
+  PENDING
+  CONFIRMED
+  CANCELLED
+}
+
 model User {
-  id        Int      @id @default(autoincrement())
-  name      String
-  email     String   @unique
-  username  String   @unique
-  phone     String
-  role      String   @default("guest")
-  avatar    String?
-  bio       String?              // optional field
-  createdAt DateTime @default(now())
+  id              Int        @id @default(autoincrement())
+  name            String
+  email           String     @unique
+  username        String     @unique
+  phone           String
+  password        String
+  role            Role       @default(GUEST)
+  avatar          String?
+  bio             String?
+  resetToken      String?
+  resetTokenExpiry DateTime?
+  createdAt       DateTime   @default(now())
+  updatedAt       DateTime   @updatedAt
+
+  listings        Listing[]
+  bookings        Booking[]
+}
+
+model Listing {
+  id           Int          @id @default(autoincrement())
+  title        String
+  description  String
+  location     String
+  pricePerNight Float
+  guests       Int
+  type         ListingType
+  amenities    String[]
+  rating       Float?
+  createdAt    DateTime     @default(now())
+  updatedAt    DateTime     @updatedAt
+
+  host         User         @relation(fields: [hostId], references: [id])
+  hostId       Int
+  bookings     Booking[]
+}
+
+model Booking {
+  id         Int           @id @default(autoincrement())
+  checkIn    DateTime
+  checkOut   DateTime
+  totalPrice Float
+  status     BookingStatus @default(PENDING)
+  createdAt  DateTime      @default(now())
+
+  guest      User          @relation(fields: [guestId], references: [id])
+  guestId    Int
+  listing    Listing       @relation(fields: [listingId], references: [id])
+  listingId  Int
 }

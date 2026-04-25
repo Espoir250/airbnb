@@ -1,9 +1,11 @@
-import "dotenv/config"
+import "dotenv/config";
 import express, { Request, Response } from "express";
 
-import  listingsRouter from "./routes/listings.routes";
-import  usersRouter from "./routes/users.routes";
-import {prisma} from "./config/prisma";
+import listingsRouter from "./routes/listings.routes";
+import usersRouter from "./routes/users.routes";
+import bookingsRouter from "./routes/bookings.routes";
+import authRouter from "./routes/auth.routes";
+import { prisma } from "./config/prisma";
 
 const app = express();
 const PORT = process.env.PORT;
@@ -16,10 +18,12 @@ app.get("/", (req: Request, res: Response) => {
 
 app.use("/users", usersRouter);
 app.use("/listings", listingsRouter);
+app.use("/bookings", bookingsRouter);
+app.use("/auth", authRouter);
 
 app.use((_req: Request, res: Response) => {
-    res.status(404).json({ message: "route not found"});
-})
+  res.status(404).json({ message: "route not found" });
+});
 
 async function connectDb() {
   try {
