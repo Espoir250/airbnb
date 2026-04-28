@@ -69,6 +69,16 @@ export const updateUser = async (
     const userId = Number(req.params.id);
     const { name, email, username, bio, phone, role } = req.body;
 
+    // Get the authenticated user ID from the request
+    const authenticatedUserId = (req as any).userId;
+    const authenticatedUserRole = (req as any).role;
+
+    // Check if user is updating their own profile or is an admin
+    if (userId !== authenticatedUserId && authenticatedUserRole !== "ADMIN") {
+      res.status(403).json({ message: "You can only update your own profile" });
+      return;
+    }
+
     const user = await prisma.user.update({
       where: { id: userId },
       data: {
@@ -94,6 +104,13 @@ export const deleteUser = async (
 ): Promise<void> => {
   try {
     const userId = Number(req.params.id);
+    const authenticatedUserRole = (req as any).role;
+
+    // Only admins can delete users
+    if (authenticatedUserRole !== "ADMIN") {
+      res.status(403).json({ message: "Only admins can delete users" });
+      return;
+    }
 
     await prisma.user.delete({
       where: { id: userId },

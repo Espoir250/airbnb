@@ -3,6 +3,7 @@ import bcrypt from "bcrypt";
 import jwt from "jsonwebtoken";
 import crypto from "crypto";
 import { prisma } from "../config/prisma";
+import { sendEmail } from "../config/email.js";
 
 const JWT_SECRET = process.env.JWT_SECRET as string;
 const JWT_EXPIRES_IN = process.env.JWT_EXPIRES_IN || "7d";
@@ -40,8 +41,33 @@ export const register = async (req: Request, res: Response): Promise<void> => {
     // Hash password
     const hashedPassword = await bcrypt.hash(password, 10);
 
-    // Determine role (only HOST or GUEST allowed via API)
-    const userRole = role === "HOST" ? "HOST" : "GUEST";
+    // Determine role (HOST, GUEST, or ADMIN allowed via API)
+    // Default to GUEST if role is not provided or invalid
+    // ADMIN role requires adminSecret
+    const validRoles = ["GUEST", "HOST", "ADMIN"];
+    let userRole: "HOST" | "GUEST" | "ADMIN" = "GUEST";
+
+    if (role) {
+      const upperRole = role.toUpperCase();
+      if (upperRole === "ADMIN") {
+        // ADMIN role requires valid admin secret
+        const envSecret = process.env.ADMIN_SECRET;
+        if (!envSecret) {
+          res
+            .status(500)
+            .json({ message: "Admin registration not configured" });
+          return;
+        }
+        const adminSecret = req.body.adminSecret;
+        if (adminSecret !== envSecret) {
+          res.status(403).json({ message: "Invalid admin secret" });
+          return;
+        }
+        userRole = "ADMIN";
+      } else if (validRoles.includes(upperRole)) {
+        userRole = upperRole as "HOST" | "GUEST";
+      }
+    }
 
     // Create user
     const user = await prisma.user.create({
@@ -54,6 +80,12 @@ export const register = async (req: Request, res: Response): Promise<void> => {
         role: userRole,
       },
     });
+    // inside register():
+    await sendEmail(
+      email,
+      "Welcome to Airbnb!",
+      `<h1>Welcome, ${name}!</h1><p>Your account has been created successfully.</p>`,
+    );
 
     // Return user without password
     const { password: _, ...userWithoutPassword } = user;

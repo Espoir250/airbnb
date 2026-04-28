@@ -53,6 +53,12 @@ export const createListing = async (
     } = req.body;
     const userId = (req as any).userId;
 
+    // Validate user is authenticated
+    if (!userId) {
+      res.status(401).json({ message: "Unauthorized" });
+      return;
+    }
+
     // Validate required fields
     if (
       !title ||
@@ -81,9 +87,11 @@ export const createListing = async (
     });
 
     res.status(201).json(listing);
-  } catch (error) {
-    console.error(error);
-    res.status(500).json({ message: "Error creating listing" });
+  } catch (error: any) {
+    console.error("Create listing error:", error);
+    res
+      .status(500)
+      .json({ message: "Error creating listing", details: error.message });
   }
 };
 

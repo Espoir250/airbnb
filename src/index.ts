@@ -6,11 +6,18 @@ import usersRouter from "./routes/users.routes";
 import bookingsRouter from "./routes/bookings.routes";
 import authRouter from "./routes/auth.routes";
 import { prisma } from "./config/prisma";
+import uploadRouter from "./routes/upload.routes.js";
+import { setupSwagger } from "./config/swagger.js";
 
 const app = express();
 const PORT = process.env.PORT;
 
+// Call after app is created
+setupSwagger(app);
+
 app.use(express.json());
+
+app.use("/users", uploadRouter);
 
 app.get("/", (req: Request, res: Response) => {
   res.send("Welcome to Airbnb application");
