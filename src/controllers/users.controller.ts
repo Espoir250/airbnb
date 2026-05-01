@@ -1,13 +1,28 @@
 import { Request, Response } from "express";
+import { Role } from "@prisma/client";
 import { prisma } from "../config/prisma";
+import { clearCache } from "../config/cache";
+import { getPagination, getTotalPages } from "../utils/request";
 
 export const getAllUsers = async (
-  _req: Request,
+  req: Request,
   res: Response,
 ): Promise<void> => {
   try {
-    const users = await prisma.user.findMany();
-    res.status(200).json(users);
+    const { page, limit, skip } = getPagination(req);
+    const [users, total] = await Promise.all([
+      prisma.user.findMany({
+        skip,
+        take: limit,
+        orderBy: { createdAt: "desc" },
+      }),
+      prisma.user.count(),
+    ]);
+
+    res.status(200).json({
+      data: users,
+      meta: { total, page, limit, totalPages: getTotalPages(total, limit) },
+    });
   } catch (error) {
     console.error(error);
     res.status(500).json({ message: "Error fetching users" });
@@ -19,7 +34,7 @@ export const getUserById = async (
   res: Response,
 ): Promise<void> => {
   try {
-    const userId = Number(req.params.id);
+    const userId = req.params.id as string;
     const user = await prisma.user.findUnique({
       where: { id: userId },
     });
@@ -42,6 +57,10 @@ export const createUser = async (
 ): Promise<void> => {
   try {
     const { name, email, username, bio, phone, role } = req.body;
+    const userRole =
+      typeof role === "string" && role.toUpperCase() in Role
+        ? (role.toUpperCase() as Role)
+        : Role.GUEST;
 
     const user = await prisma.user.create({
       data: {
@@ -51,9 +70,11 @@ export const createUser = async (
         bio,
         phone,
         password: "defaultpassword", // In a real application, you should hash the password and not use a default value
-        role: role || "guest",
+        role: userRole,
       },
     });
+
+    clearCache("stats:users");
     res.status(201).json(user);
   } catch (error) {
     console.error(error);
@@ -66,7 +87,7 @@ export const updateUser = async (
   res: Response,
 ): Promise<void> => {
   try {
-    const userId = Number(req.params.id);
+    const userId = req.params.id as string;
     const { name, email, username, bio, phone, role } = req.body;
 
     // Get the authenticated user ID from the request
@@ -91,6 +112,7 @@ export const updateUser = async (
       },
     });
 
+    clearCache("stats:users");
     res.status(200).json(user);
   } catch (error) {
     console.error(error);
@@ -103,7 +125,7 @@ export const deleteUser = async (
   res: Response,
 ): Promise<void> => {
   try {
-    const userId = Number(req.params.id);
+    const userId = req.params.id as string;
     const authenticatedUserRole = (req as any).role;
 
     // Only admins can delete users
@@ -116,6 +138,7 @@ export const deleteUser = async (
       where: { id: userId },
     });
 
+    clearCache("stats:users");
     res.status(200).json({ message: "User deleted successfully" });
   } catch (error) {
     console.error(error);

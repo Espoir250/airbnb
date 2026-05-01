@@ -9,7 +9,7 @@ import { prisma } from "../config/prisma.js";
 
 export async function uploadAvatar(req: Request, res: Response) {
   try {
-    const id = parseInt(req.params["id"] as string);
+    const id = req.params["id"] as string;
 
     // req.file is set by Multer — if it's missing, no file was sent
     if (!req.file) {

@@ -1,35 +1,58 @@
 import "dotenv/config";
-import express, { Request, Response } from "express";
+import express, { NextFunction, Request, Response } from "express";
+import compression from "compression";
 
-import listingsRouter from "./routes/listings.routes";
-import usersRouter from "./routes/users.routes";
-import bookingsRouter from "./routes/bookings.routes";
-import authRouter from "./routes/auth.routes";
+import v1Router from "./routes/v1";
 import { prisma } from "./config/prisma";
-import uploadRouter from "./routes/upload.routes.js";
 import { setupSwagger } from "./config/swagger.js";
+import {
+  generalRateLimiter,
+  strictRateLimiter,
+} from "./middlewares/rateLimiter";
 
 const app = express();
-const PORT = process.env.PORT;
+const PORT = Number(process.env["PORT"]) || 3000;
 
 // Call after app is created
 setupSwagger(app);
 
+app.use((req: Request, _res: Response, next: NextFunction) => {
+  console.log(`${req.method} ${req.originalUrl}`);
+  next();
+});
 app.use(express.json());
+app.use(compression());
+app.use(generalRateLimiter);
+app.use((req, res, next) => {
+  if (req.method === "POST") {
+    strictRateLimiter(req, res, next);
+    return;
+  }
 
-app.use("/users", uploadRouter);
+  next();
+});
 
-app.get("/", (req: Request, res: Response) => {
+app.get("/health", (_req: Request, res: Response) => {
+  res.json({
+    status: "ok",
+    uptime: process.uptime(),
+    timestamp: new Date(),
+  });
+});
+
+app.get("/", (_req: Request, res: Response) => {
   res.send("Welcome to Airbnb application");
 });
 
-app.use("/users", usersRouter);
-app.use("/listings", listingsRouter);
-app.use("/bookings", bookingsRouter);
-app.use("/auth", authRouter);
+app.use("/api/v1", v1Router);
 
 app.use((_req: Request, res: Response) => {
-  res.status(404).json({ message: "route not found" });
+  res.status(404).json({ error: "Route not found" });
+});
+
+app.use((err: Error, _req: Request, res: Response, _next: NextFunction) => {
+  console.error(err.stack);
+  res.status(500).json({ error: "Something went wrong" });
 });
 
 async function connectDb() {

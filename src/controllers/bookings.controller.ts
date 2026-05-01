@@ -1,19 +1,40 @@
 import { Request, Response } from "express";
-import { prisma } from "../config/prisma";
 import { BookingStatus } from "@prisma/client";
+import { prisma } from "../config/prisma";
+import { getPagination, getTotalPages } from "../utils/request";
+
+const getNights = (checkIn: Date, checkOut: Date): number =>
+  Math.ceil((checkOut.getTime() - checkIn.getTime()) / (1000 * 60 * 60 * 24));
+
+const withTotal = <T extends { totalPrice: number }>(booking: T) => ({
+  ...booking,
+  total: booking.totalPrice,
+});
 
 export const getAllBookings = async (
-  _req: Request,
+  req: Request,
   res: Response,
 ): Promise<void> => {
   try {
-    const bookings = await prisma.booking.findMany({
-      include: {
-        guest: true,
-        listing: true,
-      },
+    const { page, limit, skip } = getPagination(req);
+
+    const [bookings, total] = await Promise.all([
+      prisma.booking.findMany({
+        include: {
+          guest: { select: { name: true } },
+          listing: { select: { title: true, location: true } },
+        },
+        skip,
+        take: limit,
+        orderBy: { createdAt: "desc" },
+      }),
+      prisma.booking.count(),
+    ]);
+
+    res.status(200).json({
+      data: bookings.map(withTotal),
+      meta: { total, page, limit, totalPages: getTotalPages(total, limit) },
     });
-    res.status(200).json(bookings);
   } catch (error) {
     console.error(error);
     res.status(500).json({ message: "Error fetching bookings" });
@@ -25,7 +46,7 @@ export const getBookingById = async (
   res: Response,
 ): Promise<void> => {
   try {
-    const bookingId = Number(req.params.id);
+    const bookingId = req.params.id as string;
     const booking = await prisma.booking.findUnique({
       where: { id: bookingId },
       include: {
@@ -39,7 +60,7 @@ export const getBookingById = async (
       return;
     }
 
-    res.status(200).json(booking);
+    res.status(200).json(withTotal(booking));
   } catch (error) {
     console.error(error);
     res.status(500).json({ message: "Error fetching booking" });
@@ -51,80 +72,66 @@ export const createBooking = async (
   res: Response,
 ): Promise<void> => {
   try {
-    const userId = (req as any).userId;
-    const { listingId, checkIn, checkOut } = req.body;
+    const { userId, listingId, checkIn, checkOut, guests } = req.body;
 
-    // Validate required fields
-    if (!listingId || !checkIn || !checkOut) {
-      res.status(400).json({ message: "Missing required fields" });
+    if (!userId || !listingId || !checkIn || !checkOut || !guests) {
+      res.status(400).json({
+        message: "userId, listingId, checkIn, checkOut, and guests are required",
+      });
       return;
     }
 
-    // Parse dates
     const checkInDate = new Date(checkIn);
     const checkOutDate = new Date(checkOut);
+    const guestCount = Number(guests);
 
-    // Validate checkIn is before checkOut
-    if (checkInDate >= checkOutDate) {
+    if (
+      Number.isNaN(checkInDate.getTime()) ||
+      Number.isNaN(checkOutDate.getTime()) ||
+      checkInDate >= checkOutDate
+    ) {
       res
         .status(400)
         .json({ message: "Check-in date must be before check-out date" });
       return;
     }
 
-    // Validate checkIn is in the future
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    if (checkInDate < today) {
-      res.status(400).json({ message: "Check-in date must be in the future" });
+    if (!Number.isInteger(guestCount) || guestCount < 1) {
+      res.status(400).json({ message: "Guests must be a positive integer" });
       return;
     }
 
-    // Verify listing exists
-    const listing = await prisma.listing.findUnique({
-      where: { id: Number(listingId) },
-    });
+    const [user, listing] = await Promise.all([
+      prisma.user.findUnique({ where: { id: userId } }),
+      prisma.listing.findUnique({ where: { id: listingId } }),
+    ]);
+
+    if (!user) {
+      res.status(404).json({ message: "User not found" });
+      return;
+    }
 
     if (!listing) {
       res.status(404).json({ message: "Listing not found" });
       return;
     }
 
-    // Check for booking conflicts (overlapping dates with CONFIRMED bookings)
-    const conflictingBooking = await prisma.booking.findFirst({
-      where: {
-        listingId: Number(listingId),
-        status: "CONFIRMED",
-        checkIn: { lt: checkOutDate },
-        checkOut: { gt: checkInDate },
-      },
-    });
+    const nights = getNights(checkInDate, checkOutDate);
+    const totalPrice = listing.pricePerNight * nights;
 
-    if (conflictingBooking) {
-      res
-        .status(409)
-        .json({ message: "Booking conflict: dates already booked" });
-      return;
-    }
-
-    // Calculate total price server-side
-    const diffTime = checkOutDate.getTime() - checkInDate.getTime();
-    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-    const totalPrice = diffDays * listing.pricePerNight;
-
-    // Create booking with PENDING status
     const booking = await prisma.booking.create({
       data: {
         guestId: userId,
-        listingId: Number(listingId),
+        listingId,
         checkIn: checkInDate,
         checkOut: checkOutDate,
+        guests: guestCount,
         totalPrice,
-        status: BookingStatus.PENDING,
+        status: BookingStatus.CONFIRMED,
       },
     });
 
-    res.status(201).json(booking);
+    res.status(201).json(withTotal(booking));
   } catch (error) {
     console.error(error);
     res.status(500).json({ message: "Error creating booking" });
@@ -136,12 +143,9 @@ export const updateBooking = async (
   res: Response,
 ): Promise<void> => {
   try {
-    const bookingId = Number(req.params.id);
-    const userId = (req as any).userId;
-    const userRole = (req as any).role;
-    const { checkIn, checkOut, totalPrice, status } = req.body;
+    const bookingId = req.params.id as string;
+    const { checkIn, checkOut, totalPrice, status, guests } = req.body;
 
-    // Find the booking
     const booking = await prisma.booking.findUnique({
       where: { id: bookingId },
     });
@@ -151,25 +155,18 @@ export const updateBooking = async (
       return;
     }
 
-    // Check ownership - ADMIN can update any booking
-    if (booking.guestId !== userId && userRole !== "ADMIN") {
-      res
-        .status(403)
-        .json({ message: "You can only update your own bookings" });
-      return;
-    }
-
     const updatedBooking = await prisma.booking.update({
       where: { id: bookingId },
       data: {
         ...(checkIn && { checkIn: new Date(checkIn) }),
         ...(checkOut && { checkOut: new Date(checkOut) }),
+        ...(guests && { guests: Number(guests) }),
         ...(totalPrice && { totalPrice: Number(totalPrice) }),
         ...(status && { status: status as BookingStatus }),
       },
     });
 
-    res.status(200).json(updatedBooking);
+    res.status(200).json(withTotal(updatedBooking));
   } catch (error) {
     console.error(error);
     res.status(500).json({ message: "Error updating booking" });
@@ -181,11 +178,8 @@ export const deleteBooking = async (
   res: Response,
 ): Promise<void> => {
   try {
-    const bookingId = Number(req.params.id);
-    const userId = (req as any).userId;
-    const userRole = (req as any).role;
+    const bookingId = req.params.id as string;
 
-    // Find the booking
     const booking = await prisma.booking.findUnique({
       where: { id: bookingId },
     });
@@ -195,21 +189,6 @@ export const deleteBooking = async (
       return;
     }
 
-    // Check ownership - ADMIN can cancel any booking
-    if (booking.guestId !== userId && userRole !== "ADMIN") {
-      res
-        .status(403)
-        .json({ message: "You can only cancel your own bookings" });
-      return;
-    }
-
-    // Check if already cancelled
-    if (booking.status === "CANCELLED") {
-      res.status(400).json({ message: "Booking is already cancelled" });
-      return;
-    }
-
-    // Update status to CANCELLED instead of deleting
     await prisma.booking.update({
       where: { id: bookingId },
       data: { status: BookingStatus.CANCELLED },
@@ -227,14 +206,35 @@ export const getUserBookings = async (
   res: Response,
 ): Promise<void> => {
   try {
-    const userId = Number(req.params.userId);
-    const bookings = await prisma.booking.findMany({
-      where: { guestId: userId },
-      include: {
-        listing: true,
-      },
+    const userId = (req.params.id || req.params.userId) as string;
+    const { page, limit, skip } = getPagination(req);
+
+    const user = await prisma.user.findUnique({
+      where: { id: userId },
     });
-    res.status(200).json(bookings);
+
+    if (!user) {
+      res.status(404).json({ message: "User not found" });
+      return;
+    }
+
+    const [bookings, total] = await Promise.all([
+      prisma.booking.findMany({
+        where: { guestId: userId },
+        include: {
+          listing: { select: { title: true, location: true, pricePerNight: true } },
+        },
+        skip,
+        take: limit,
+        orderBy: { createdAt: "desc" },
+      }),
+      prisma.booking.count({ where: { guestId: userId } }),
+    ]);
+
+    res.status(200).json({
+      data: bookings.map(withTotal),
+      meta: { total, page, limit, totalPages: getTotalPages(total, limit) },
+    });
   } catch (error) {
     console.error(error);
     res.status(500).json({ message: "Error fetching user bookings" });
@@ -246,14 +246,26 @@ export const getListingBookings = async (
   res: Response,
 ): Promise<void> => {
   try {
-    const listingId = Number(req.params.listingId);
-    const bookings = await prisma.booking.findMany({
-      where: { listingId },
-      include: {
-        guest: true,
-      },
+    const listingId = req.params.listingId as string;
+    const { page, limit, skip } = getPagination(req);
+
+    const [bookings, total] = await Promise.all([
+      prisma.booking.findMany({
+        where: { listingId },
+        include: {
+          guest: { select: { name: true, email: true } },
+        },
+        skip,
+        take: limit,
+        orderBy: { createdAt: "desc" },
+      }),
+      prisma.booking.count({ where: { listingId } }),
+    ]);
+
+    res.status(200).json({
+      data: bookings.map(withTotal),
+      meta: { total, page, limit, totalPages: getTotalPages(total, limit) },
     });
-    res.status(200).json(bookings);
   } catch (error) {
     console.error(error);
     res.status(500).json({ message: "Error fetching listing bookings" });

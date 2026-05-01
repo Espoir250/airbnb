@@ -4,6 +4,7 @@ import jwt from "jsonwebtoken";
 import crypto from "crypto";
 import { prisma } from "../config/prisma";
 import { sendEmail } from "../config/email.js";
+import { clearCache } from "../config/cache";
 
 const JWT_SECRET = process.env.JWT_SECRET as string;
 const JWT_EXPIRES_IN = process.env.JWT_EXPIRES_IN || "7d";
@@ -80,6 +81,7 @@ export const register = async (req: Request, res: Response): Promise<void> => {
         role: userRole,
       },
     });
+    clearCache("stats:users");
     // inside register():
     await sendEmail(
       email,

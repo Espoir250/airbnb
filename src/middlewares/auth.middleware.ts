@@ -4,7 +4,7 @@ import jwt from "jsonwebtoken";
 const JWT_SECRET = process.env.JWT_SECRET || "your-long-random-secret-key";
 
 export interface AuthRequest extends Request {
-  userId?: number;
+  userId?: string;
   role?: string;
 }
 
@@ -27,7 +27,7 @@ export const authenticate = (
 
     // Verify token
     const decoded = jwt.verify(token, JWT_SECRET) as {
-      userId: number;
+      userId: string;
       role: string;
     };
 
