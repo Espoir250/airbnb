@@ -1,5 +1,6 @@
 import { Router } from "express";
 import authRouter from "./auth.routes";
+//import aiRouter from "./ai.routes";
 import bookingsRouter from "./bookings.routes";
 import listingsRouter from "./listings.routes";
 import reviewsRouter from "./reviews.routes";
@@ -10,8 +11,9 @@ import { deprecateV1 } from "../../middlewares/deprecation.middleware";
 const v1Router = Router();
 
 v1Router.use(deprecateV1);
+//v1Router.use("/ai", aiRouter);
 v1Router.use("/auth", authRouter);
-v1Router.use("/users", uploadRouter);
+v1Router.use("/upload", uploadRouter);
 v1Router.use("/users", usersRouter);
 v1Router.use("/listings", listingsRouter);
 v1Router.use("/bookings", bookingsRouter);

@@ -132,6 +132,7 @@ export const createReview = async (
 
     // Clear cache for this listing's reviews
     clearCachePattern(`reviews:listing:${listingId}*`);
+    clearCachePattern(`ai:review-summary:${listingId}*`);
 
     res.status(201).json(review);
   } catch (error) {
@@ -169,6 +170,7 @@ export const deleteReview = async (
 
     // Clear cache for this listing's reviews
     clearCachePattern(`reviews:listing:${review.listingId}*`);
+    clearCachePattern(`ai:review-summary:${review.listingId}*`);
 
     res.status(200).json({ message: "Review deleted successfully" });
   } catch (error) {
