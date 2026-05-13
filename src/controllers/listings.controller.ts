@@ -1,5 +1,5 @@
 import { Request, Response } from "express";
-import { ListingType, Prisma } from "../generated/prisma/client";
+import { ListingType, Prisma } from '@prisma/client';
 import { prisma } from "../config/prisma";
 import { clearCache, clearCachePattern, getCache, setCache } from "../config/cache";
 import { getFirstValue, getPagination, getTotalPages } from "../utils/request";

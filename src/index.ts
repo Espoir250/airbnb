@@ -1,6 +1,7 @@
 import "dotenv/config";
 import express, { NextFunction, Request, Response } from "express";
 import compression from "compression";
+import cors from "cors";
 
 import v1Router from "./routes/v1";
 import { prisma } from "./config/prisma";
@@ -16,13 +17,23 @@ const PORT = Number(process.env["PORT"]) || 3000;
 // Call after app is created
 setupSwagger(app);
 
+/* ✅ ADD CORS HERE (IMPORTANT FIX) */
+app.use(
+  cors({
+    origin: "http://localhost:5173",
+    credentials: true,
+  })
+);
+
 app.use((req: Request, _res: Response, next: NextFunction) => {
   console.log(`${req.method} ${req.originalUrl}`);
   next();
 });
+
 app.use(express.json());
 app.use(compression());
 app.use(generalRateLimiter);
+
 app.use((req, res, next) => {
   if (req.method === "POST") {
     strictRateLimiter(req, res, next);
@@ -44,6 +55,7 @@ app.get("/", (_req: Request, res: Response) => {
   res.send("Welcome to Airbnb application");
 });
 
+/* API ROUTES */
 app.use("/api/v1", v1Router);
 
 app.use((_req: Request, res: Response) => {

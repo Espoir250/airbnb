@@ -130,7 +130,11 @@ aiRouter.post("/search", smartSearchListings);
  *       500:
  *         description: AI service error
  */
-aiRouter.post("/listings/:id/generate-description", authenticate, generateListingDescription);
+aiRouter.post(
+  "/listings/:id/generate-description",
+  authenticate,
+  generateListingDescription,
+);
 
 /**
  * @swagger
