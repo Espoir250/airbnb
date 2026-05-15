@@ -3,13 +3,17 @@ import {
   createListing,
   deleteListing,
   getAllListings,
+  // getAllListingsAdmin,
   getListingById,
+  // getPendingListings,
+  // approveListing,
+  // rejectListing,
   searchListings,
   updateListing,
 } from "../../controllers/listings.controller";
 import { createReview, getListingReviews } from "../../controllers/reviews.controller";
 import { getListingStats } from "../../controllers/stats.controller";
-import { authenticate, requireHost } from "../../middlewares/auth.middleware";
+import { authenticate, requireHost, requireAdmin } from "../../middlewares/auth.middleware";
 
 const listingsRouter = Router();
 
@@ -59,8 +63,8 @@ const listingsRouter = Router();
  *           example: 2
  *         status:
  *           type: string
- *           enum: [active, inactive]
- *           example: active
+ *           enum: [PENDING, APPROVED, REJECTED]
+ *           example: PENDING
  *     CreateListingInput:
  *       type: object
  *       required: [title, description, price, location, maxGuests, bedrooms, bathrooms]
@@ -121,8 +125,8 @@ const listingsRouter = Router();
  *           example: 6
  *         status:
  *           type: string
- *           enum: [active, inactive]
- *           example: active
+ *           enum: [PENDING, APPROVED, REJECTED]
+ *           example: PENDING
  *     Review:
  *       type: object
  *       properties:
@@ -179,15 +183,17 @@ const listingsRouter = Router();
  *   description: Listing management endpoints
  */
 
+// ─── Public Routes ────────────────────────────────────────────────────────────
+
 /**
  * @swagger
  * /listings:
  *   get:
- *     summary: Get all listings
+ *     summary: Get all approved listings
  *     tags: [Listings]
  *     responses:
  *       200:
- *         description: List of all listings
+ *         description: List of all approved listings
  *         content:
  *           application/json:
  *             schema:
@@ -201,7 +207,7 @@ listingsRouter.get("/", getAllListings);
  * @swagger
  * /listings/search:
  *   get:
- *     summary: Search listings by query parameters
+ *     summary: Search approved listings by query parameters
  *     tags: [Listings]
  *     parameters:
  *       - in: query
@@ -238,7 +244,7 @@ listingsRouter.get("/", getAllListings);
  *         description: Check-out date
  *     responses:
  *       200:
- *         description: Filtered list of listings
+ *         description: Filtered list of approved listings
  *         content:
  *           application/json:
  *             schema:
@@ -267,6 +273,116 @@ listingsRouter.get("/search", searchListings);
  *         description: Unauthorized
  */
 listingsRouter.get("/stats", getListingStats);
+
+// ─── Admin Routes ─────────────────────────────────────────────────────────────
+
+/**
+ * @swagger
+ * /listings/admin/all:
+ *   get:
+ *     summary: Get all listings regardless of status (admin only)
+ *     tags: [Listings]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: status
+ *         schema:
+ *           type: string
+ *           enum: [PENDING, APPROVED, REJECTED]
+ *         description: Optional filter by status
+ *     responses:
+ *       200:
+ *         description: All listings
+ *       401:
+ *         description: Unauthorized
+ *       403:
+ *         description: Forbidden - admins only
+ */
+// listingsRouter.get("/admin/all", authenticate, requireAdmin, getAllListingsAdmin);
+
+/**
+ * @swagger
+ * /listings/admin/pending:
+ *   get:
+ *     summary: Get all pending listings awaiting approval (admin only)
+ *     tags: [Listings]
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: List of pending listings
+ *       401:
+ *         description: Unauthorized
+ *       403:
+ *         description: Forbidden - admins only
+ */
+ //listingsRouter.get("/admin/pending", authenticate, requireAdmin, getPendingListings);
+
+/**
+ * @swagger
+ * /listings/{id}/approve:
+ *   patch:
+ *     summary: Approve a listing (admin only)
+ *     tags: [Listings]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: The listing ID
+ *     responses:
+ *       200:
+ *         description: Listing approved successfully
+ *       404:
+ *         description: Listing not found
+ *       401:
+ *         description: Unauthorized
+ *       403:
+ *         description: Forbidden - admins only
+ */
+//listingsRouter.patch("/:id/approve", authenticate, requireAdmin, approveListing);
+
+/**
+ * @swagger
+ * /listings/{id}/reject:
+ *   patch:
+ *     summary: Reject a listing (admin only)
+ *     tags: [Listings]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: The listing ID
+ *     requestBody:
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               reason:
+ *                 type: string
+ *                 example: Listing does not meet our quality standards
+ *     responses:
+ *       200:
+ *         description: Listing rejected
+ *       404:
+ *         description: Listing not found
+ *       401:
+ *         description: Unauthorized
+ *       403:
+ *         description: Forbidden - admins only
+ */
+//listingsRouter.patch("/:id/reject", authenticate, requireAdmin, rejectListing);
+
+// ─── Listing-specific Routes ──────────────────────────────────────────────────
 
 /**
  * @swagger
@@ -359,7 +475,7 @@ listingsRouter.get("/:id", getListingById);
  * @swagger
  * /listings:
  *   post:
- *     summary: Create a new listing (hosts only)
+ *     summary: Create a new listing (hosts only) - starts as PENDING until admin approves
  *     tags: [Listings]
  *     security:
  *       - bearerAuth: []
@@ -371,7 +487,7 @@ listingsRouter.get("/:id", getListingById);
  *             $ref: '#/components/schemas/CreateListingInput'
  *     responses:
  *       201:
- *         description: Listing created successfully
+ *         description: Listing submitted and pending approval
  *         content:
  *           application/json:
  *             schema:
@@ -389,7 +505,7 @@ listingsRouter.post("/", authenticate, requireHost, createListing);
  * @swagger
  * /listings/{id}:
  *   put:
- *     summary: Update a listing by ID
+ *     summary: Update a listing by ID (resets status to PENDING for re-approval)
  *     tags: [Listings]
  *     security:
  *       - bearerAuth: []

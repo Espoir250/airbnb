@@ -1,7 +1,12 @@
 import { Request, Response } from "express";
-import { ListingType, Prisma } from '@prisma/client';
+import { ListingType, Prisma } from "@prisma/client";
 import { prisma } from "../config/prisma";
-import { clearCache, clearCachePattern, getCache, setCache } from "../config/cache";
+import {
+  clearCache,
+  clearCachePattern,
+  getCache,
+  setCache,
+} from "../config/cache";
 import { getFirstValue, getPagination, getTotalPages } from "../utils/request";
 
 export const getAllListings = async (
@@ -23,6 +28,9 @@ export const getAllListings = async (
         skip,
         take: limit,
         orderBy: { createdAt: "desc" },
+        include: {
+          host: { select: { id: true, name: true, username: true } },
+        },
       }),
       prisma.listing.count(),
     ]);
@@ -51,10 +59,7 @@ export const searchListings = async (
     const minPrice = Number(getFirstValue(req.query.minPrice));
     const maxPrice = Number(getFirstValue(req.query.maxPrice));
     const guests = Number(getFirstValue(req.query.guests));
-    const listingType =
-      type && type.toUpperCase() in ListingType
-        ? (type.toUpperCase() as ListingType)
-        : undefined;
+    const listingType = normalizeListingType(type);
 
     if (type && !listingType) {
       res.status(400).json({ message: "Invalid listing type" });
@@ -108,6 +113,9 @@ export const getListingById = async (
     const listingId = req.params.id as string;
     const listing = await prisma.listing.findUnique({
       where: { id: listingId },
+      include: {
+        host: { select: { id: true, name: true, username: true } },
+      },
     });
 
     if (!listing) {
@@ -121,6 +129,25 @@ export const getListingById = async (
     res.status(500).json({ message: "Error fetching listing" });
   }
 };
+
+/**
+ * Accept the three frontend type values: APARTMENT, HOUSE, HOTEL.
+ * HOTEL maps to VILLA in the Prisma enum (the underlying DB value).
+ */
+function normalizeListingType(type?: string | null): ListingType | undefined {
+  if (!type) return undefined;
+
+  switch (type.toUpperCase()) {
+    case "APARTMENT":
+      return ListingType.APARTMENT;
+    case "HOUSE":
+      return ListingType.HOUSE;
+    case "HOTEL":
+      return ListingType.VILLA;
+    default:
+      return undefined;
+  }
+}
 
 export const createListing = async (
   req: Request,
@@ -138,10 +165,6 @@ export const createListing = async (
       rating,
     } = req.body;
     const userId = (req as any).userId;
-    const listingType =
-      typeof type === "string" && type.toUpperCase() in ListingType
-        ? (type.toUpperCase() as ListingType)
-        : undefined;
 
     // Validate user is authenticated
     if (!userId) {
@@ -162,8 +185,12 @@ export const createListing = async (
       return;
     }
 
+    const listingType = normalizeListingType(type);
+
     if (!listingType) {
-      res.status(400).json({ message: "Invalid listing type" });
+      res.status(400).json({
+        message: `Invalid listing type: "${type}". Valid values are: APARTMENT, HOUSE, HOTEL (or VILLA, CABIN).`,
+      });
       return;
     }
 
@@ -178,6 +205,9 @@ export const createListing = async (
         amenities: amenities || [],
         rating: rating ? Number(rating) : null,
         hostId: userId,
+      },
+      include: {
+        host: { select: { id: true, name: true, username: true } },
       },
     });
 
@@ -211,19 +241,19 @@ export const updateListing = async (
       amenities,
       rating,
     } = req.body;
-    const listingType =
-      typeof type === "string" && type.toUpperCase() in ListingType
-        ? (type.toUpperCase() as ListingType)
-        : undefined;
+
+    const listingType = type ? normalizeListingType(type) : undefined;
 
     if (type && !listingType) {
       res.status(400).json({ message: "Invalid listing type" });
       return;
     }
 
-    // Find the listing
     const listing = await prisma.listing.findUnique({
       where: { id: listingId },
+      include: {
+        host: { select: { id: true, name: true, username: true } },
+      },
     });
 
     if (!listing) {
@@ -231,7 +261,6 @@ export const updateListing = async (
       return;
     }
 
-    // Check ownership - ADMIN can edit any listing
     if (listing.hostId !== userId && userRole !== "ADMIN") {
       res.status(403).json({ message: "You can only edit your own listings" });
       return;
@@ -270,9 +299,11 @@ export const deleteListing = async (
     const userId = (req as any).userId;
     const userRole = (req as any).role;
 
-    // Find the listing
     const listing = await prisma.listing.findUnique({
       where: { id: listingId },
+      include: {
+        host: { select: { id: true, name: true, username: true } },
+      },
     });
 
     if (!listing) {
@@ -280,7 +311,6 @@ export const deleteListing = async (
       return;
     }
 
-    // Check ownership - ADMIN can delete any listing
     if (listing.hostId !== userId && userRole !== "ADMIN") {
       res
         .status(403)
@@ -288,9 +318,12 @@ export const deleteListing = async (
       return;
     }
 
-    await prisma.listing.delete({
-      where: { id: listingId },
-    });
+    // Delete related bookings first to satisfy the foreign key constraint,
+    // then delete the listing itself.
+    await prisma.$transaction([
+      prisma.booking.deleteMany({ where: { listingId } }),
+      prisma.listing.delete({ where: { id: listingId } }),
+    ]);
 
     clearCachePattern("listings:*");
     clearCachePattern(`reviews:listing:${listingId}*`);
@@ -302,4 +335,3 @@ export const deleteListing = async (
     res.status(500).json({ message: "Error deleting listing" });
   }
 };
-

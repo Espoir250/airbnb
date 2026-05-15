@@ -154,7 +154,7 @@ Use null when the query does not clearly specify a value.`,
         ),
         new HumanMessage(query),
       ],
-      true, // deterministic — temperature: 0
+      true,
     );
 
     const filters = normalizeFilters(parseJsonObject(raw));
@@ -311,7 +311,7 @@ If asked something not covered by the listing details, say you don't have that i
     }
 
     const history = chatSessions.get(sessionId) ?? [];
-    const trimmedHistory = history.slice(-20); // last 10 exchanges = 20 messages
+    const trimmedHistory = history.slice(-20);
 
     const aiResponse = await invokeAi([
       new SystemMessage(systemPrompt),
@@ -333,13 +333,16 @@ If asked something not covered by the listing details, say you don't have that i
       messageCount: nextHistory.length,
     });
   } catch (error) {
+    // ✅ detailed error logging
+    console.error("Guest support chat error message:", (error as Error).message);
+    console.error("Guest support chat error stack:", (error as Error).stack);
+
     const aiError = getAiErrorResponse(error);
     if (aiError) {
       res.status(aiError.status).json({ message: aiError.message });
       return;
     }
-    console.error("Guest support chat error:", error);
-    res.status(500).json({ message: "Error generating chat response" });
+    res.status(500).json({ message: (error as Error).message ?? "Error generating chat response" }); // ✅ returns real error
   }
 };
 
