@@ -82,6 +82,11 @@ model Listing {
   amenities String[]
 
   rating Float?
+    // Images
+  image    String?
+  imageUrl String?
+  images   String[]
+
 
   // Admin moderation
   status          ListingStatus @default(PENDING)

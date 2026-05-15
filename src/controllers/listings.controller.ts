@@ -163,6 +163,10 @@ export const createListing = async (
       type,
       amenities,
       rating,
+      image,
+      imageUrl,
+      coverImage,
+      images,
     } = req.body;
     const userId = (req as any).userId;
 
@@ -194,6 +198,15 @@ export const createListing = async (
       return;
     }
 
+    // Resolve the primary image from whichever field was sent
+    const primaryImage = image ?? imageUrl ?? coverImage ?? images?.[0] ?? null;
+    // Resolve the full images array
+    const allImages: string[] = Array.isArray(images) && images.length > 0
+      ? images
+      : primaryImage
+      ? [primaryImage]
+      : [];
+
     const listing = await prisma.listing.create({
       data: {
         title,
@@ -205,6 +218,9 @@ export const createListing = async (
         amenities: amenities || [],
         rating: rating ? Number(rating) : null,
         hostId: userId,
+        image: primaryImage,
+        imageUrl: primaryImage,
+        images: allImages,
       },
       include: {
         host: { select: { id: true, name: true, username: true } },
@@ -240,6 +256,10 @@ export const updateListing = async (
       type,
       amenities,
       rating,
+      image,
+      imageUrl,
+      coverImage,
+      images,
     } = req.body;
 
     const listingType = type ? normalizeListingType(type) : undefined;
@@ -266,6 +286,14 @@ export const updateListing = async (
       return;
     }
 
+    // Resolve image fields if any were sent
+    const primaryImage = image ?? imageUrl ?? coverImage ?? images?.[0] ?? undefined;
+    const allImages: string[] | undefined = Array.isArray(images) && images.length > 0
+      ? images
+      : primaryImage
+      ? [primaryImage]
+      : undefined;
+
     const updatedListing = await prisma.listing.update({
       where: { id: listingId },
       data: {
@@ -277,6 +305,8 @@ export const updateListing = async (
         ...(listingType && { type: listingType }),
         ...(amenities && { amenities }),
         ...(rating && { rating: Number(rating) }),
+        ...(primaryImage && { image: primaryImage, imageUrl: primaryImage }),
+        ...(allImages && { images: allImages }),
       },
     });
 
