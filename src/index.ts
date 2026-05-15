@@ -20,7 +20,10 @@ setupSwagger(app);
 /* ✅ ADD CORS HERE (IMPORTANT FIX) */
 app.use(
   cors({
-    origin: "http://localhost:5173",
+    origin: [
+      "http://localhost:5173",
+      "https://airbnb-app-r6ra.onrender.com",
+    ],
     credentials: true,
   })
 );
