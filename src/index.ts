@@ -34,7 +34,7 @@ app.use(express.json());
 app.use(compression());
 app.use(generalRateLimiter);
 
-app.use((req, res, next) => {
+app.use((req: Request, res: Response, next: NextFunction) => {
   if (req.method === "POST") {
     strictRateLimiter(req, res, next);
     return;

@@ -202,9 +202,10 @@ export const generateListingDescription = async (
 ): Promise<void> => {
   try {
     const listingId = req.params.id as string;
-    const rawTone = req.body?.tone ?? "professional";
+    const rawTone =
+      typeof req.body?.tone === "string" ? req.body.tone : "professional";
 
-    if (!validTones.includes(rawTone)) {
+    if (!validTones.includes(rawTone as (typeof validTones)[number])) {
       res.status(400).json({ message: "Tone must be professional, casual, or luxury" });
       return;
     }

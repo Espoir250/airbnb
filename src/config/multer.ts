@@ -1,11 +1,12 @@
-import multer from "multer";
+import multer, { FileFilterCallback } from "multer";
+import type { Request } from "express";
 
 const storage = multer.memoryStorage();
 
 function fileFilter(
-  req: Express.Request,
+  req: Request,
   file: Express.Multer.File,
-  cb: multer.FileFilterCallback,
+  cb: FileFilterCallback,
 ) {
   const allowedTypes = ["image/jpeg", "image/png", "image/gif"];
   if (allowedTypes.includes(file.mimetype)) {

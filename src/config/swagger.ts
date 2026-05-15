@@ -48,7 +48,7 @@ export function setupSwagger(app: Express) {
 
   // Also expose the raw OpenAPI JSON spec
   // Useful for importing into Postman or generating client SDKs
-  app.get("/api-docs.json", (req, res) => {
+  app.get("/api-docs.json", (_req: import("express").Request, res: import("express").Response) => {
     res.json(swaggerSpec);
   });
 

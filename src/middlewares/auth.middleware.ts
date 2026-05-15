@@ -6,6 +6,10 @@ const JWT_SECRET = process.env.JWT_SECRET || "your-long-random-secret-key";
 export interface AuthRequest extends Request {
   userId?: string;
   role?: string;
+  body: Record<string, unknown>;
+  params: Record<string, string>;
+  headers: Request["headers"];
+  query: Request["query"];
 }
 
 export const authenticate = (
